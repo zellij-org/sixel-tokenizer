@@ -1,7 +1,6 @@
-use ::insta::assert_snapshot;
-use std::str::{self, Utf8Error};
-use std::num::ParseIntError;
 use arrayvec::{ArrayVec, CapacityError};
+use std::num::ParseIntError;
+use std::str::{self, Utf8Error};
 
 use thiserror::Error;
 
@@ -48,6 +47,7 @@ pub enum ParserState {
     DeviceControlString,
     EscapeCharacter,
     ColorIntroducer,
+    RasterAttribute,
     GraphicsRepeatIntroducer,
     UnknownInstruction,
 }
@@ -58,8 +58,14 @@ pub enum SixelEvent {
         color_number: u8,
         color_coordinate_system: Option<ColorCoordinateSystem>,
     },
+    RasterAttribute {
+        pan: u8,
+        pad: u8,
+        ph: Option<u8>,
+        pv: Option<u8>,
+    },
     Data {
-        byte: u8
+        byte: u8,
     },
     Repeat {
         repeat_count: u8, // TODO: size?
@@ -90,24 +96,26 @@ impl ColorCoordinateSystem {
     }
 }
 
-pub struct Parser <'a>{
+#[derive(Clone, Copy, Debug)]
+pub enum ParsingResult {
+    EmitEvent(SixelEvent),
+    WaitingForMore,
+}
+
+pub struct Parser<'a> {
     state: ParserState,
     raw_instruction: ArrayVec<u8, 256>, // TODO: proper cap
-    intermediate_color_introducer: ArrayVec<ArrayVec<u8, 3>, 5>,
-    intermediate_dcs: ArrayVec<ArrayVec<u8, 3>, 3>,
-    intermediate_repeat: ArrayVec<ArrayVec<u8, 3>, 3>,
+    pending_event_fields: ArrayVec<ArrayVec<u8, 3>, 5>,
     currently_parsing: ArrayVec<u8, 256>, // TODO: proper cap
     events: &'a mut Vec<SixelEvent>,
 }
 
-impl <'a> Parser <'a>{
+impl<'a> Parser<'a> {
     pub fn new(events: &'a mut Vec<SixelEvent>) -> Self {
         Parser {
             state: ParserState::Ground,
             raw_instruction: ArrayVec::new(),
-            intermediate_color_introducer: ArrayVec::new(),
-            intermediate_dcs: ArrayVec::new(),
-            intermediate_repeat: ArrayVec::new(),
+            pending_event_fields: ArrayVec::new(),
             currently_parsing: ArrayVec::new(),
             events,
         }
@@ -118,169 +126,190 @@ impl <'a> Parser <'a>{
             return;
         }
         self.raw_instruction.push(*byte);
-        match self.state {
-            ParserState::Ground => {
-                self.handle_ground(*byte);
-            }
-            ParserState::EscapeCharacter => {
-                if let Err(err) = self.handle_escape_character(*byte) {
-                    self.state = ParserState::Ground;
-                    self.handle_ground(*byte);
-                }
-            }
-            ParserState::DeviceControlString => {
-                if let Err(err) = self.handle_device_control_string(*byte) {
-                    self.state = ParserState::Ground;
-                    self.handle_ground(*byte);
-                }
-            }
-            ParserState::ColorIntroducer => {
-                if let Err(err) = self.handle_color_introducer(*byte) {
-                    self.state = ParserState::Ground;
-                    self.handle_ground(*byte);
-                }
-            }
-            ParserState::GraphicsRepeatIntroducer => {
-                if let Err(err) = self.handle_repeat_introducer(*byte) {
-                    self.state = ParserState::Ground;
-                    self.handle_ground(*byte);
-                }
-            }
-            ParserState::UnknownInstruction => {
-
-            }
-            _ => {}
-        }
+        println!(
+            "byte: {:?}, current_state: {:?}",
+            str::from_utf8(&[*byte]),
+            self.state
+        );
+        self.parse_byte(byte);
     }
-    fn handle_ground(&mut self, byte: u8) {
-        match byte {
-            b'?'..=b'~' => {
-                self.emit_sixel_data(byte);
-            }
-            b'$' => {
-                self.emit_beginning_of_line_event();
-            }
-            b'-' => {
-                self.emit_next_line_event();
-            }
-            _ => {}
-        }
-        self.state = next_state(self.state, byte);
-    }
-    fn handle_device_control_string(&mut self, byte: u8) -> Result<(), ParserError> {
-        if byte == b';' {
-            self.finalize_dcs_field()?;
-            Ok(())
-        } else if byte == b'q' {
-            self.finalize_dcs_field()?;
-            self.emit_dcs_event()?;
-            self.state = ParserState::Ground;
-            Ok(())
+    fn parse_byte(&mut self, byte: &u8) {
+        self.move_to_next_state(*byte);
+        if *byte == b';' {
+            self.finalize_field().unwrap(); // TODO: not unwrap
         } else if let b'0'..=b'9' = byte {
-            self.currently_parsing.push(byte);
-            Ok(())
-        } else {
-            self.finalize_dcs_field()?;
-            self.emit_dcs_event()?;
-            Err(ParserError::ParsingError)
+            self.currently_parsing.push(*byte);
         }
     }
-    fn handle_color_introducer(&mut self, byte: u8) -> Result<(), ParserError> {
-        if byte == b';' {
-            self.finalize_color_introducer_field()?;
-            Ok(())
-        } else if let b'0'..=b'9' = byte{
-            self.currently_parsing.push(byte);
-            Ok(())
-        } else {
-            self.finalize_color_introducer_field()?;
-            self.emit_color_introducer_event()?;
-            Err(ParserError::ParsingError)
-        }
-    }
-    fn handle_escape_character(&mut self, byte: u8) -> Result<(), ParserError> {
-        if byte == b'P' {
-            self.state = ParserState::DeviceControlString;
-            Ok(())
-        } else if byte == b'\\' {
-            // end sixel sequence
-            self.state = ParserState::Ground;
-            self.clear();
-            Ok(())
-        } else {
-            Err(ParserError::ParsingError)
-        }
-    }
-    fn handle_repeat_introducer(&mut self, byte: u8) -> Result<(), ParserError> {
-        if let b'0'..=b'9' = byte {
-            self.currently_parsing.push(byte);
-            Ok(())
-        } else if let b'?'..=b'~' = byte {
-            self.finalize_repeat_introducer_field()?;
-            self.emit_repeat_introducer_event(byte)?;
-            self.state = ParserState::Ground;
-            Ok(())
-        } else {
-            Err(ParserError::ParsingError)
-        }
-    }
-    fn finalize_color_introducer_field(&mut self) -> Result<(), ParserError> {
-        if !self.currently_parsing.is_empty() {
-            let currently_parsing = self.currently_parsing.drain(..);
-            if currently_parsing.len() > 3 {
-                return Err(ParserError::ParsingError);
-            } else {
-                let currently_parsing: ArrayVec<u8, 3> = currently_parsing.collect();
-                self.intermediate_color_introducer.try_push(
-                    currently_parsing
-                )?;
-            }
-        }
+    fn emit_dcs_event(&mut self) -> Result<(), ParserError> {
+        self.finalize_field()?;
+        let event = self.create_dcs_event()?;
+        self.emit_event(event);
         Ok(())
-    }
-    fn finalize_dcs_field(&mut self) -> Result<(), ParserError> {
-        if !self.currently_parsing.is_empty() {
-            self.intermediate_dcs.try_push(self.currently_parsing.drain(..).collect())?;
-        }
-        Ok(())
-    }
-    fn finalize_repeat_introducer_field(&mut self) -> Result<(), ParserError> {
-        if !self.currently_parsing.is_empty() {
-            self.intermediate_repeat.try_push(self.currently_parsing.drain(..).collect())?;
-        }
-        Ok(())
+        // TODO: clear raw
     }
     fn emit_color_introducer_event(&mut self) -> Result<(), ParserError> {
-        let mut byte_fields = self.intermediate_color_introducer.drain(..);
-        let color_number = byte_fields.next().map(|f| bytes_to_u8(f)).ok_or(ParserError::ParsingError)?;
+        self.finalize_field()?;
+        let event = self.create_color_introducer_event()?;
+        self.emit_event(event);
+        Ok(())
+        // TODO: clear raw
+    }
+    fn emit_raster_attribute_event(&mut self) -> Result<(), ParserError> {
+        self.finalize_field()?;
+        let event = self.create_raster_attribute_event()?;
+        self.emit_event(event);
+        Ok(())
+        // TODO: clear raw
+    }
+    fn emit_sixel_data_event(&mut self, byte: u8) -> Result<(), ParserError> {
+        self.finalize_field()?;
+        let event = self.create_sixel_data_event(byte);
+        self.emit_event(event);
+        Ok(())
+    }
+    fn emit_repeat_introducer_event(&mut self, byte: u8) -> Result<(), ParserError> {
+        self.finalize_field()?;
+        let event = self.create_repeat_introducer_event(byte)?;
+        self.emit_event(event);
+        Ok(())
+    }
+    fn emit_beginning_of_line_event(&mut self) -> Result<(), ParserError> {
+        let event = self.create_beginning_of_line_event();
+        self.emit_event(event);
+        Ok(())
+    }
+    fn emit_next_line_event(&mut self) -> Result<(), ParserError> {
+        let event = self.create_next_line_event();
+        self.emit_event(event);
+        Ok(())
+    }
+    fn emit_possible_pending_event(&mut self) -> Result<(), ParserError> {
+        if self.currently_parsing.is_empty() && self.pending_event_fields.is_empty() {
+            Ok(())
+        } else {
+            match self.state {
+                ParserState::ColorIntroducer => self.emit_color_introducer_event()?,
+                ParserState::RasterAttribute => self.emit_raster_attribute_event()?,
+                _ => {}
+            }
+            Ok(())
+        }
+    }
+    fn emit_single_byte_event(&mut self, byte: u8) -> Result<(), ParserError> {
+        match byte {
+            b'?'..=b'~' => {
+                self.emit_sixel_data_event(byte)?
+            }
+            b'$' => {
+                self.emit_beginning_of_line_event()?
+            }
+            b'-' => {
+                self.emit_next_line_event()?
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    fn move_to_next_state(&mut self, byte: u8) {
+        let current_state = self.state;
+        match (current_state, byte) {
+            (ParserState::EscapeCharacter, b'P' | b'\\') => {
+                self.state = ParserState::DeviceControlString;
+            }
+            (ParserState::DeviceControlString, b'q') => {
+                self.emit_dcs_event().unwrap(); // TODO: not unwrap
+                self.state = ParserState::Ground;
+            }
+            (ParserState::GraphicsRepeatIntroducer, b'?'..=b'~') => {
+                self.emit_repeat_introducer_event(byte).unwrap(); // TODO: not unwrap
+            }
+            (_, b'?'..=b'~' | b'$' | b'-') => {
+                self.emit_possible_pending_event().unwrap(); // TODO: not unwrap
+                self.emit_single_byte_event(byte).unwrap(); // TODO: not unwrap
+                self.state = ParserState::Ground;
+            }
+            (_, b'#') => {
+                self.emit_possible_pending_event().unwrap(); // TODO: not unwrap
+                self.state = ParserState::ColorIntroducer;
+            }
+            (_, b'"') => {
+                self.emit_possible_pending_event().unwrap(); // TODO: not unwrap
+                self.state = ParserState::RasterAttribute;
+            }
+            (_, b'!') => {
+                self.emit_possible_pending_event().unwrap(); // TODO: not unwrap
+                self.state = ParserState::GraphicsRepeatIntroducer;
+            }
+            (_, 27) => {
+                self.emit_possible_pending_event().unwrap(); // TODO: not unwrap
+                self.state = ParserState::EscapeCharacter;
+            }
+            _ => {}
+        };
+    }
+    fn finalize_field(&mut self) -> Result<(), ParserError> {
+        if !self.currently_parsing.is_empty() {
+            self.pending_event_fields
+                .try_push(self.currently_parsing.drain(..).collect())?;
+        }
+        Ok(())
+    }
+    fn create_color_introducer_event(&mut self) -> Result<SixelEvent, ParserError> {
+        let mut byte_fields = self.pending_event_fields.drain(..);
+        let color_number = byte_fields
+            .next()
+            .map(|f| bytes_to_u8(f))
+            .ok_or(ParserError::ParsingError)?;
         let coordinate_system_indicator = byte_fields.next().map(|f| bytes_to_u8(f));
         let x = byte_fields.next().map(|f| bytes_to_u8(f));
         let y = byte_fields.next().map(|f| bytes_to_u8(f));
         let z = byte_fields.next().map(|f| bytes_to_u8(f));
         match (color_number, coordinate_system_indicator, x, y, z) {
-            (Ok(color_number), Some(Ok(coordinate_system_indicator)), Some(Ok(x)), Some(Ok(y)), Some(Ok(z))) => {
+            (
+                Ok(color_number),
+                Some(Ok(coordinate_system_indicator)),
+                Some(Ok(x)),
+                Some(Ok(y)),
+                Some(Ok(z)),
+            ) => {
                 let event = SixelEvent::ColorIntroducer {
                     color_number,
-                    color_coordinate_system: Some(ColorCoordinateSystem::new(coordinate_system_indicator, x, y, z).unwrap()), // TODO: handle err
+                    color_coordinate_system: Some(
+                        ColorCoordinateSystem::new(coordinate_system_indicator, x, y, z).unwrap(),
+                    ), // TODO: handle err
                 };
-                self.events.push(event);
-                Ok(())
-            },
+                Ok(event)
+            }
             (Ok(color_number), _, _, _, _) => {
                 let event = SixelEvent::ColorIntroducer {
                     color_number,
-                    color_coordinate_system: None
+                    color_coordinate_system: None,
                 };
-                self.events.push(event);
-                Ok(())
+                Ok(event)
             }
-            _ => {
-                Err(ParserError::ParsingError)
-            }
+            _ => Err(ParserError::ParsingError),
         }
     }
-    fn emit_dcs_event(&mut self) -> Result<(), ParserError> {
-        let mut byte_fields = self.intermediate_dcs.drain(..);
+    fn create_raster_attribute_event(&mut self) -> Result<SixelEvent, ParserError> {
+        let mut byte_fields = self.pending_event_fields.drain(..);
+        let pan = bytes_to_u8(byte_fields.next().ok_or(ParserError::ParsingError)?)?;
+        let pad = bytes_to_u8(byte_fields.next().ok_or(ParserError::ParsingError)?)?;
+        let ph = byte_fields.next().and_then(|f| bytes_to_u8(f).ok());
+        let pv = byte_fields.next().and_then(|f| bytes_to_u8(f).ok());
+        if byte_fields.next().is_some() {
+            return Err(ParserError::ParsingError);
+        }
+        let event = SixelEvent::RasterAttribute {
+            pan,
+            pad,
+            ph,
+            pv
+        };
+        Ok(event)
+    }
+    fn create_dcs_event(&mut self) -> Result<SixelEvent, ParserError> {
+        let mut byte_fields = self.pending_event_fields.drain(..);
         let macro_parameter = byte_fields.next().map(|f| bytes_to_u8(f).ok()).flatten();
         let inverse_background = byte_fields.next().map(|f| bytes_to_u8(f).ok()).flatten();
         let horizontal_pixel_distance = byte_fields.next().map(|f| bytes_to_u8(f).ok()).flatten();
@@ -289,78 +318,45 @@ impl <'a> Parser <'a>{
             inverse_background,
             horizontal_pixel_distance,
         };
-        self.events.push(event);
-        Ok(())
+        Ok(event)
     }
-    fn emit_repeat_introducer_event(&mut self, byte_to_repeat: u8) -> Result<(), ParserError> {
-        let mut byte_fields = self.intermediate_repeat.drain(..);
-        let repeat_count = byte_fields.next().map(|f| bytes_to_u8(f).ok()).flatten().ok_or(ParserError::ParsingError)?;
+    fn create_repeat_introducer_event(
+        &mut self,
+        byte_to_repeat: u8,
+    ) -> Result<SixelEvent, ParserError> {
+        let mut byte_fields = self.pending_event_fields.drain(..);
+        let repeat_count = byte_fields
+            .next()
+            .map(|f| bytes_to_u8(f).ok())
+            .flatten()
+            .ok_or(ParserError::ParsingError)?;
         let event = SixelEvent::Repeat {
             repeat_count,
-            byte_to_repeat
+            byte_to_repeat,
         };
-        self.events.push(event);
-        Ok(())
+        Ok(event)
     }
-    fn emit_sixel_data(&mut self, byte: u8) {
-        let event = SixelEvent::Data {
-            byte
-        };
-        self.events.push(event);
+    fn create_sixel_data_event(&mut self, byte: u8) -> SixelEvent {
+        SixelEvent::Data { byte }
     }
-    fn emit_beginning_of_line_event(&mut self) {
-        let event = SixelEvent::GotoBeginningOfLine;
-        self.events.push(event);
+    fn create_beginning_of_line_event(&mut self) -> SixelEvent {
+        SixelEvent::GotoBeginningOfLine
     }
-    fn emit_next_line_event(&mut self) {
-        let event = SixelEvent::GotoNextLine;
+    fn create_next_line_event(&mut self) -> SixelEvent {
+        SixelEvent::GotoNextLine
+    }
+    fn emit_event(&mut self, event: SixelEvent) {
+        println!("emitting: {:?}", event);
         self.events.push(event);
     }
-    fn clear(&mut self) {
-
-    }
-}
-
-fn next_state(current_state: ParserState, byte: u8) -> ParserState {
-    match (current_state, byte) {
-        (ParserState::EscapeCharacter, b'P') => ParserState::DeviceControlString,
-        (ParserState::DeviceControlString, b'q') => ParserState::Ground,
-        (_, b'#') => ParserState::ColorIntroducer,
-        (_, b'!') => ParserState::GraphicsRepeatIntroducer,
-        (_, b'$') => ParserState::Ground,
-        (_, b'-') => ParserState::Ground,
-        (_, 27) => ParserState::EscapeCharacter,
-        _ => current_state
-    }
+    fn clear(&mut self) {}
 }
 
 fn bytes_to_u8(bytes: ArrayVec<u8, 3>) -> Result<u8, ParserError> {
     // TODO: error handling, return Result
-    // let bytes: ArrayVec<u8, 3> = bytes.iter().map(|b| b + 48).collect(); // + 48 to assume it's a numerical digit
     Ok(u8::from_str_radix(str::from_utf8(&bytes)?, 10)?)
 }
 
-#[test]
-fn basic_sample() {
-    let sample = "
-        \u{1b}Pq
-        #0;2;0;0;0#1;2;100;100;0#2;2;0;100;0
-        #1~~@@vv@@~~@@~~$
-        #2??}}GG}}??}}??-
-        #1!14@
-        \u{1b}\\
-    ";
-    let sample_bytes = sample.as_bytes();
-    let mut events = vec![];
-    let mut parser = Parser::new(&mut events);
-    for byte in sample_bytes {
-        parser.advance(byte);
-    };
-    let mut snapshot = String::new();
-    for event in events {
-        snapshot.push_str(&format!("{:?}", event));
-        snapshot.push('\n');
-    }
-
-    assert_snapshot!(snapshot);
-}
+#[cfg(test)]
+#[path = "./tests.rs"]
+mod tests;
