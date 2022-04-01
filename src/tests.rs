@@ -3,7 +3,7 @@ use insta::assert_snapshot;
 use std::num::ParseIntError;
 use std::str::{self, Utf8Error};
 
-use crate::Parser;
+use crate::{Parser, SixelEvent};
 
 #[test]
 fn basic_sample() {
@@ -33,17 +33,47 @@ fn basic_sample() {
 
 #[test]
 fn dcs_event () {
-    // TBD
+    let sample = "\u{1b}Pq";
+    let sample_bytes = sample.as_bytes();
+    let mut events = vec![];
+    let mut parser = Parser::new();
+    for byte in sample_bytes {
+        parser.advance(&byte, |sixel_event| events.push(sixel_event));
+    }
+    let expected = vec![
+        SixelEvent::new_dcs(None, None, None)
+    ];
+    assert_eq!(events, expected);
 }
 
 #[test]
 fn dcs_event_with_all_optional_fields () {
-    // TBD
+    let sample = "\u{1b}P2;1;005;q"; // the 00 padding is added just to make sure we can handle it
+    let sample_bytes = sample.as_bytes();
+    let mut events = vec![];
+    let mut parser = Parser::new();
+    for byte in sample_bytes {
+        parser.advance(&byte, |sixel_event| events.push(sixel_event));
+    }
+    let expected = vec![
+        SixelEvent::new_dcs(Some(2), Some(1), Some(5))
+    ];
+    assert_eq!(events, expected);
 }
 
 #[test]
 fn dcs_event_with_partial_optional_fields() {
-    // TBD
+    let sample = "\u{1b}P2q"; // the 00 padding is added just to make sure we can handle it
+    let sample_bytes = sample.as_bytes();
+    let mut events = vec![];
+    let mut parser = Parser::new();
+    for byte in sample_bytes {
+        parser.advance(&byte, |sixel_event| events.push(sixel_event));
+    }
+    let expected = vec![
+        SixelEvent::new_dcs(Some(2), None, None)
+    ];
+    assert_eq!(events, expected);
 }
 
 #[test]

@@ -129,17 +129,17 @@ impl Parser {
     }
     fn emit_dcs_event(&mut self) -> Result<SixelEvent, ParserError> {
         self.finalize_field()?;
-        SixelEvent::new_dcs(&mut self.pending_event_fields)
+        SixelEvent::dcs_from_fields(&mut self.pending_event_fields)
         // TODO: clear raw
     }
     fn emit_color_introducer_event(&mut self) -> Result<SixelEvent, ParserError> {
         self.finalize_field()?;
-        SixelEvent::new_color_introducer(&mut self.pending_event_fields)
+        SixelEvent::color_introducer_from_fields(&mut self.pending_event_fields)
         // TODO: clear raw
     }
     fn emit_raster_attribute_event(&mut self) -> Result<SixelEvent, ParserError> {
         self.finalize_field()?;
-        SixelEvent::new_raster_attribute(&mut self.pending_event_fields)
+        SixelEvent::raster_attribute_from_fields(&mut self.pending_event_fields)
         // TODO: clear raw
     }
     fn emit_sixel_data_event(&mut self, byte: u8) -> Result<SixelEvent, ParserError> {
@@ -148,7 +148,7 @@ impl Parser {
     }
     fn emit_repeat_introducer_event(&mut self, byte: u8) -> Result<SixelEvent, ParserError> {
         self.finalize_field()?;
-        SixelEvent::new_repeat(&mut self.pending_event_fields, byte)
+        SixelEvent::repeat_from_fields(&mut self.pending_event_fields, byte)
     }
     fn emit_beginning_of_line_event(&mut self) -> Result<SixelEvent, ParserError> {
         Ok(SixelEvent::GotoBeginningOfLine)
@@ -187,11 +187,6 @@ impl Parser {
                 .try_push(self.currently_parsing.drain(..).collect())?;
         }
         Ok(())
-    }
-    fn emit_event(&mut self, event: SixelEvent) {
-        println!("emitting: {:?}", event);
-        // (self.cb)(event);
-        // self.events.push(event);
     }
     fn clear(&mut self) {}
 }

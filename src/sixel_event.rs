@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::ParserError;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SixelEvent {
     ColorIntroducer {
         color_number: u8,
@@ -35,7 +35,10 @@ pub enum SixelEvent {
 }
 
 impl SixelEvent {
-    pub fn new_color_introducer(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>) -> Result<SixelEvent, ParserError> {
+    pub fn new_dcs(macro_parameter: Option<u8>, inverse_background: Option<u8>, horizontal_pixel_distance: Option<u8>) -> SixelEvent {
+        SixelEvent::Dcs { macro_parameter, inverse_background, horizontal_pixel_distance }
+    }
+    pub fn color_introducer_from_fields(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>) -> Result<SixelEvent, ParserError> {
         let mut byte_fields = pending_event_fields.drain(..);
         let color_number = mandatory_field(byte_fields.next())?;
         let coordinate_system_indicator = optional_field(byte_fields.next())?;
@@ -69,7 +72,7 @@ impl SixelEvent {
             }
         }
     }
-    pub fn new_raster_attribute(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>) -> Result<SixelEvent, ParserError> {
+    pub fn raster_attribute_from_fields(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>) -> Result<SixelEvent, ParserError> {
         let mut byte_fields = pending_event_fields.drain(..);
         let pan = mandatory_field(byte_fields.next())?;
         let pad = mandatory_field(byte_fields.next())?;
@@ -86,7 +89,7 @@ impl SixelEvent {
         };
         Ok(event)
     }
-    pub fn new_dcs(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>) -> Result<SixelEvent, ParserError> {
+    pub fn dcs_from_fields(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>) -> Result<SixelEvent, ParserError> {
         let mut byte_fields = pending_event_fields.drain(..);
         let macro_parameter = optional_field(byte_fields.next())?;
         let inverse_background = optional_field(byte_fields.next())?;
@@ -101,7 +104,7 @@ impl SixelEvent {
         };
         Ok(event)
     }
-    pub fn new_repeat(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>, byte_to_repeat: u8) -> Result<SixelEvent, ParserError> {
+    pub fn repeat_from_fields(pending_event_fields: &mut ArrayVec<ArrayVec<u8, 3>, 5>, byte_to_repeat: u8) -> Result<SixelEvent, ParserError> {
         let mut byte_fields = pending_event_fields.drain(..);
         let repeat_count = mandatory_field(byte_fields.next())?;
         if byte_fields.next().is_some() {
@@ -115,7 +118,7 @@ impl SixelEvent {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColorCoordinateSystem {
     HLS(u8, u8, u8),
     RGB(u8, u8, u8),
