@@ -57,12 +57,18 @@ impl Parser {
             self.handle_error(e, Some(*byte), &mut cb);
         }
     }
-    fn process_byte(&mut self, byte: u8, mut cb: impl FnMut(SixelEvent)) -> Result<(), ParserError> {
+    fn process_byte(
+        &mut self,
+        byte: u8,
+        mut cb: impl FnMut(SixelEvent),
+    ) -> Result<(), ParserError> {
         match (self.state, byte) {
             (ParserState::EscapeCharacter, b'P') => self.raw_instruction.try_push(byte)?,
             (ParserState::EscapeCharacter, b'\\') => self.emit_end_sequence(&mut cb)?,
             (ParserState::DeviceControlString, b'q') => self.emit_dcs_event(&mut cb)?,
-            (ParserState::GraphicsRepeatIntroducer, b'?'..=b'~') => self.emit_repeat_introducer_event(byte, &mut cb)?,
+            (ParserState::GraphicsRepeatIntroducer, b'?'..=b'~') => {
+                self.emit_repeat_introducer_event(byte, &mut cb)?
+            }
             (_, b'?'..=b'~' | b'$' | b'-') => {
                 self.emit_possible_pending_event(&mut cb);
                 self.emit_single_byte_event(byte, &mut cb)?;
@@ -86,14 +92,16 @@ impl Parser {
     fn move_to_next_state(&mut self, byte: u8) {
         self.state = match (self.state, byte) {
             (ParserState::EscapeCharacter, b'P') => ParserState::DeviceControlString,
-            (ParserState::EscapeCharacter, b'\\') | (ParserState::DeviceControlString, b'q') | (ParserState::GraphicsRepeatIntroducer, b'?'..=b'~') => ParserState::Ground,
+            (ParserState::EscapeCharacter, b'\\')
+            | (ParserState::DeviceControlString, b'q')
+            | (ParserState::GraphicsRepeatIntroducer, b'?'..=b'~') => ParserState::Ground,
             (_, b'?'..=b'~' | b'$' | b'-') => ParserState::Ground,
             (_, b'#') => ParserState::ColorIntroducer,
             (_, b'"') => ParserState::RasterAttribute,
             (_, b'!') => ParserState::GraphicsRepeatIntroducer,
             (_, b';' | b'0'..=b'9') => self.state,
             (_, 27) => ParserState::EscapeCharacter,
-            _ => ParserState::UnknownSequence
+            _ => ParserState::UnknownSequence,
         };
     }
     fn handle_error(&mut self, err: ParserError, byte: Option<u8>, cb: impl FnMut(SixelEvent)) {
@@ -119,7 +127,11 @@ impl Parser {
         cb(SixelEvent::End);
         Ok(())
     }
-    fn emit_repeat_introducer_event(&mut self, byte: u8, mut cb: impl FnMut(SixelEvent)) -> Result<(), ParserError> {
+    fn emit_repeat_introducer_event(
+        &mut self,
+        byte: u8,
+        mut cb: impl FnMut(SixelEvent),
+    ) -> Result<(), ParserError> {
         self.finalize_field()?;
         let event = SixelEvent::repeat_from_fields(&mut self.pending_event_fields, byte)?;
         self.raw_instruction.clear();
@@ -129,11 +141,15 @@ impl Parser {
     fn emit_possible_pending_event(&mut self, mut cb: impl FnMut(SixelEvent)) {
         match self.possible_pending_event() {
             Ok(Some(event)) => cb(event),
-            Ok(None) => {},
+            Ok(None) => {}
             Err(e) => self.handle_error(e, None, &mut cb),
         }
     }
-    fn emit_single_byte_event(&mut self, byte: u8, mut cb: impl FnMut(SixelEvent)) -> Result<(), ParserError> {
+    fn emit_single_byte_event(
+        &mut self,
+        byte: u8,
+        mut cb: impl FnMut(SixelEvent),
+    ) -> Result<(), ParserError> {
         let event = match byte {
             b'?'..=b'~' => self.sixel_data_event(byte),
             b'$' => self.beginning_of_line_event(),
@@ -186,17 +202,19 @@ impl Parser {
         Ok(SixelEvent::GotoNextLine)
     }
     fn possible_pending_event(&mut self) -> Result<Option<SixelEvent>, ParserError> {
-        let has_pending_event = !self.currently_parsing.is_empty() || !self.pending_event_fields.is_empty() || !self.raw_instruction.is_empty();
+        let has_pending_event = !self.currently_parsing.is_empty()
+            || !self.pending_event_fields.is_empty()
+            || !self.raw_instruction.is_empty();
         if has_pending_event {
             match self.state {
                 ParserState::ColorIntroducer => {
                     let event = self.color_introducer_event()?;
                     Ok(Some(event))
-                },
+                }
                 ParserState::RasterAttribute => {
                     let event = self.raster_attribute_event()?;
                     Ok(Some(event))
-                },
+                }
                 _ => Err(ParserError::ParsingError),
             }
         } else {
@@ -210,9 +228,8 @@ impl Parser {
                 // we don't use collect here because ArrayVec doesn't implement Try and so
                 // we wouldn't be able to propagate errors
                 field.try_push(byte)?;
-            };
-            self.pending_event_fields
-                .try_push(field)?;
+            }
+            self.pending_event_fields.try_push(field)?;
         }
         Ok(())
     }

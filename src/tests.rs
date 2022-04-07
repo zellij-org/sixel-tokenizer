@@ -32,7 +32,7 @@ fn basic_sample() {
 }
 
 #[test]
-fn dcs_event () {
+fn dcs_event() {
     let sample = "\u{1b}Pq";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -40,14 +40,12 @@ fn dcs_event () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::new_dcs(None, None, None)
-    ];
+    let expected = vec![SixelEvent::new_dcs(None, None, None)];
     assert_eq!(events, expected);
 }
 
 #[test]
-fn dcs_event_with_all_optional_fields () {
+fn dcs_event_with_all_optional_fields() {
     let sample = "\u{1b}P2;1;005;q"; // the 00 padding is added just to make sure we can handle it
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -55,9 +53,7 @@ fn dcs_event_with_all_optional_fields () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::new_dcs(Some(2), Some(1), Some(5))
-    ];
+    let expected = vec![SixelEvent::new_dcs(Some(2), Some(1), Some(5))];
     assert_eq!(events, expected);
 }
 
@@ -70,9 +66,7 @@ fn dcs_event_with_partial_optional_fields() {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::new_dcs(Some(2), None, None)
-    ];
+    let expected = vec![SixelEvent::new_dcs(Some(2), None, None)];
     assert_eq!(events, expected);
 }
 
@@ -105,14 +99,14 @@ fn corrupted_partial_dcs_event() {
     let expected = vec![
         SixelEvent::UnknownSequence([Some(27), Some(b'P'), None, None, None]),
         SixelEvent::UnknownSequence([Some(b'%'), None, None, None, None]),
-        SixelEvent::Data { byte: b'q'},
+        SixelEvent::Data { byte: b'q' },
         SixelEvent::End,
     ];
     assert_eq!(events, expected);
 }
 
 #[test]
-fn color_introducer_event () {
+fn color_introducer_event() {
     let sample = "#2\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -122,13 +116,13 @@ fn color_introducer_event () {
     }
     let expected = vec![
         SixelEvent::new_color_introducer(2, None, None, None, None).unwrap(),
-        SixelEvent::End
+        SixelEvent::End,
     ];
     assert_eq!(events, expected);
 }
 
 #[test]
-fn color_introducer_event_with_all_optional_fields () {
+fn color_introducer_event_with_all_optional_fields() {
     let sample = "#0;1;100;150;200\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -138,7 +132,7 @@ fn color_introducer_event_with_all_optional_fields () {
     }
     let expected = vec![
         SixelEvent::new_color_introducer(0, Some(1), Some(100), Some(150), Some(200)).unwrap(),
-        SixelEvent::End
+        SixelEvent::End,
     ];
     assert_eq!(events, expected);
 }
@@ -155,7 +149,7 @@ fn color_introducer_event_with_partial_optional_fields() {
     let expected = vec![
         SixelEvent::UnknownSequence([Some(b'#'), Some(b'0'), Some(b';'), Some(b'1'), Some(b';')]),
         SixelEvent::UnknownSequence([Some(b'1'), Some(b'0'), Some(b'0'), None, None]),
-        SixelEvent::End
+        SixelEvent::End,
     ];
     assert_eq!(events, expected);
 }
@@ -172,7 +166,7 @@ fn corrupted_color_introducer_event() {
     let expected = vec![
         SixelEvent::UnknownSequence([Some(b'#'), Some(b'0'), Some(b';'), Some(b'1'), None]),
         SixelEvent::UnknownSequence([Some(b'!'), Some(b';'), Some(b'1'), Some(b'0'), Some(b'0')]),
-        SixelEvent::End
+        SixelEvent::End,
     ];
     assert_eq!(events, expected);
 }
@@ -297,7 +291,7 @@ fn color_introducer_event_after_beginning_of_line_event() {
 }
 
 #[test]
-fn raster_event () {
+fn raster_event() {
     let sample = "\"2;1\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -306,14 +300,14 @@ fn raster_event () {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
     let expected = vec![
-        SixelEvent::new_raster(2, 1, None,None).unwrap(),
+        SixelEvent::new_raster(2, 1, None, None).unwrap(),
         SixelEvent::End,
     ];
     assert_eq!(events, expected);
 }
 
 #[test]
-fn raster_event_with_all_optional_fields () {
+fn raster_event_with_all_optional_fields() {
     let sample = "\"2;1;100;200\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -506,7 +500,7 @@ fn raster_event_after_beginning_of_line_event() {
 }
 
 #[test]
-fn data_event () {
+fn data_event() {
     let sample = "@\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -514,10 +508,7 @@ fn data_event () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::Data { byte: b'@' },
-        SixelEvent::End,
-    ];
+    let expected = vec![SixelEvent::Data { byte: b'@' }, SixelEvent::End];
     assert_eq!(events, expected);
 }
 
@@ -641,7 +632,7 @@ fn data_event_after_beginning_of_line_event() {
 }
 
 #[test]
-fn repeat_event () {
+fn repeat_event() {
     let sample = "!5?\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -649,15 +640,12 @@ fn repeat_event () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::new_repeat(5, b'?').unwrap(),
-        SixelEvent::End,
-    ];
+    let expected = vec![SixelEvent::new_repeat(5, b'?').unwrap(), SixelEvent::End];
     assert_eq!(events, expected);
 }
 
 #[test]
-fn long_repeat_event () {
+fn long_repeat_event() {
     let sample = "!298@\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -665,10 +653,7 @@ fn long_repeat_event () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::new_repeat(298, b'@').unwrap(),
-        SixelEvent::End,
-    ];
+    let expected = vec![SixelEvent::new_repeat(298, b'@').unwrap(), SixelEvent::End];
     assert_eq!(events, expected);
 }
 
@@ -809,7 +794,7 @@ fn repeat_event_after_beginning_of_line_event() {
 }
 
 #[test]
-fn next_line_event () {
+fn next_line_event() {
     let sample = "-\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -817,10 +802,7 @@ fn next_line_event () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::GotoNextLine,
-        SixelEvent::End,
-    ];
+    let expected = vec![SixelEvent::GotoNextLine, SixelEvent::End];
     assert_eq!(events, expected);
 }
 
@@ -927,7 +909,7 @@ fn next_line_event_after_beginning_of_line_event() {
 }
 
 #[test]
-fn beginning_of_line_event () {
+fn beginning_of_line_event() {
     let sample = "$\u{1b}\\";
     let sample_bytes = sample.as_bytes();
     let mut events = vec![];
@@ -935,10 +917,7 @@ fn beginning_of_line_event () {
     for byte in sample_bytes {
         parser.advance(&byte, |sixel_event| events.push(sixel_event));
     }
-    let expected = vec![
-        SixelEvent::GotoBeginningOfLine,
-        SixelEvent::End,
-    ];
+    let expected = vec![SixelEvent::GotoBeginningOfLine, SixelEvent::End];
     assert_eq!(events, expected);
 }
 
