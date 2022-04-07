@@ -1,5 +1,5 @@
 [package]
-name = "sixel-machine"
+name = "sixel-tokenizer"
 version = "0.1.0"
 edition = "2021"
 
