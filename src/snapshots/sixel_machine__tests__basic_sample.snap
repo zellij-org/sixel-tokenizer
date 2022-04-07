@@ -1,6 +1,6 @@
 ---
 source: src/./tests.rs
-assertion_line: 56
+assertion_line: 31
 expression: snapshot
 ---
 Dcs { macro_parameter: None, inverse_background: None, horizontal_pixel_distance: None }
@@ -42,4 +42,5 @@ Data { byte: 63 }
 GotoNextLine
 ColorIntroducer { color_number: 1, color_coordinate_system: None }
 Repeat { repeat_count: 14, byte_to_repeat: 64 }
+End
 
