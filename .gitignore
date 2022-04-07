@@ -1,1 +1,11 @@
-/target
+target/
+*.new
+.vscode
+.vim
+.DS_Store
+/assets/man/zellij.1
+
+# nix
+.direnv/
+result
+result-*
