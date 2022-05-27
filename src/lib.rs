@@ -5,7 +5,8 @@ use arrayvec::{ArrayVec, CapacityError};
 use thiserror::Error;
 
 mod sixel_event;
-use sixel_event::SixelEvent;
+pub use sixel_event::SixelEvent;
+pub use sixel_event::ColorCoordinateSystem;
 
 #[derive(Error, Debug)]
 pub enum ParserError {
@@ -32,6 +33,7 @@ pub enum ParserState {
     UnknownSequence,
 }
 
+#[derive(Clone, Debug)]
 pub struct Parser {
     state: ParserState,
     raw_instruction: ArrayVec<u8, 256>,

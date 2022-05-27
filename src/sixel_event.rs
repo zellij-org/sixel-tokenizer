@@ -6,7 +6,7 @@ use crate::ParserError;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SixelEvent {
     ColorIntroducer {
-        color_number: u8,
+        color_number: u16,
         color_coordinate_system: Option<ColorCoordinateSystem>,
     },
     RasterAttribute {
@@ -46,7 +46,7 @@ impl SixelEvent {
         }
     }
     pub fn new_color_introducer(
-        color_number: u8,
+        color_number: u16,
         coordinate_system_indicator: Option<u8>,
         x: Option<usize>,
         y: Option<usize>,
@@ -79,7 +79,7 @@ impl SixelEvent {
         pending_event_fields: &mut ArrayVec<ArrayVec<u8, 5>, 5>,
     ) -> Result<SixelEvent, ParserError> {
         let mut byte_fields = pending_event_fields.drain(..);
-        let color_number = mandatory_field(byte_fields.next())?;
+        let color_number = mandatory_field_u16(byte_fields.next())?;
         let coordinate_system_indicator = optional_field(byte_fields.next())?;
         let x = optional_usize_field(byte_fields.next())?;
         let y = optional_usize_field(byte_fields.next())?;
@@ -196,12 +196,16 @@ fn bytes_to_u8(bytes: ArrayVec<u8, 5>) -> Result<u8, ParserError> {
     Ok(u8::from_str_radix(str::from_utf8(&bytes)?, 10)?)
 }
 
+fn bytes_to_u16(bytes: ArrayVec<u8, 5>) -> Result<u16, ParserError> {
+    Ok(u16::from_str_radix(str::from_utf8(&bytes)?, 10)?)
+}
+
 fn bytes_to_usize(bytes: ArrayVec<u8, 5>) -> Result<usize, ParserError> {
     Ok(usize::from_str_radix(str::from_utf8(&bytes)?, 10)?)
 }
 
-fn mandatory_field(field: Option<ArrayVec<u8, 5>>) -> Result<u8, ParserError> {
-    bytes_to_u8(field.ok_or(ParserError::ParsingError)?)
+fn mandatory_field_u16(field: Option<ArrayVec<u8, 5>>) -> Result<u16, ParserError> {
+    bytes_to_u16(field.ok_or(ParserError::ParsingError)?)
 }
 
 fn mandatory_usize_field(field: Option<ArrayVec<u8, 5>>) -> Result<usize, ParserError> {
