@@ -1020,5 +1020,3 @@ fn beginning_of_line_event_after_next_line_event() {
     ];
     assert_eq!(events, expected);
 }
-
-// TODO: same tests for gotobeginningofline events and test unknown sequences longer than 5
