@@ -24,7 +24,7 @@ pub enum SixelEvent {
     },
     Dcs {
         macro_parameter: Option<u8>,
-        inverse_background: Option<u8>,
+        transparent_background: Option<u8>,
         horizontal_pixel_distance: Option<usize>,
     },
     GotoBeginningOfLine,
@@ -36,12 +36,12 @@ pub enum SixelEvent {
 impl SixelEvent {
     pub fn new_dcs(
         macro_parameter: Option<u8>,
-        inverse_background: Option<u8>,
+        transparent_background: Option<u8>,
         horizontal_pixel_distance: Option<usize>,
     ) -> SixelEvent {
         SixelEvent::Dcs {
             macro_parameter,
-            inverse_background,
+            transparent_background,
             horizontal_pixel_distance,
         }
     }
@@ -135,14 +135,14 @@ impl SixelEvent {
     ) -> Result<SixelEvent, ParserError> {
         let mut byte_fields = pending_event_fields.drain(..);
         let macro_parameter = optional_field(byte_fields.next())?;
-        let inverse_background = optional_field(byte_fields.next())?;
+        let transparent_background = optional_field(byte_fields.next())?;
         let horizontal_pixel_distance = optional_usize_field(byte_fields.next())?;
         if byte_fields.next().is_some() {
             return Err(ParserError::ParsingError);
         }
         let event = SixelEvent::Dcs {
             macro_parameter,
-            inverse_background,
+            transparent_background,
             horizontal_pixel_distance,
         };
         Ok(event)

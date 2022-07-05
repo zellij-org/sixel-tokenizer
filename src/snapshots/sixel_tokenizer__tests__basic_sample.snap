@@ -3,7 +3,7 @@ source: src/./tests.rs
 assertion_line: 31
 expression: snapshot
 ---
-Dcs { macro_parameter: None, inverse_background: None, horizontal_pixel_distance: None }
+Dcs { macro_parameter: None, transparent_background: None, horizontal_pixel_distance: None }
 RasterAttribute { pan: 2, pad: 1, ph: Some(100), pv: Some(200) }
 ColorIntroducer { color_number: 0, color_coordinate_system: Some(RGB(0, 0, 0)) }
 ColorIntroducer { color_number: 1, color_coordinate_system: Some(RGB(100, 100, 0)) }

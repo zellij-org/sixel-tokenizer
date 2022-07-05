@@ -1,7 +1,5 @@
-use arrayvec::{ArrayVec, CapacityError};
 use insta::assert_snapshot;
-use std::num::ParseIntError;
-use std::str::{self, Utf8Error};
+use std::str;
 
 use crate::{Parser, SixelEvent};
 
