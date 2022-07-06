@@ -3,11 +3,9 @@ name = "sixel-tokenizer"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 arrayvec = "0.7.2"
 thiserror = "1.0.30"
-eyre = "0.6.7"
+
+[dev-dependencies]
 insta = "1.14.0"
-log = "0.4.16"
