@@ -1,6 +1,6 @@
 # sixel-tokenizer
 
-This is a tokenizer for serialized Sixel images, for more info on the protocol, see: <https://vt100.net/docs/vt3xx-gp/chapter14.html>
+This is a tokenizer for serialized Sixel images, for more info on the protocol, see: https://vt100.net/docs/vt3xx-gp/chapter14.html
 
 `Parser` should be given sixel bytes one by one and a callback. The callback is called with a
 `SixelEvent` zero or more times per byte when relevant.
@@ -49,3 +49,5 @@ ColorIntroducer { color_number: 1, color_coordinate_system: None }
 Repeat { repeat_count: 14, byte_to_repeat: 64 }
 End
 ```
+# License
+MIT
