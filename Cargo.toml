@@ -1,5 +1,6 @@
 [package]
 name = "sixel-tokenizer"
+description = "A tokenizer for serialized Sixel bytes"
 authors = ["Aram Drevekenin <aram@poor.dev>"]
 license = "MIT"
 repository = "https://github.com/zellij-org/sixel-tokenizer"
