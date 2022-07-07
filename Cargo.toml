@@ -1,5 +1,8 @@
 [package]
 name = "sixel-tokenizer"
+authors = ["Aram Drevekenin <aram@poor.dev>"]
+license = "MIT"
+repository = "https://github.com/zellij-org/sixel-tokenizer"
 version = "0.1.0"
 edition = "2021"
 
